@@ -33,12 +33,24 @@ $check_count = 2
     }
 }
 
-@lots_of_small_decoys() {
-    @steady_clear() {
-        // We've already faced large decoys, so abandon the idea of an offset clear.
-        reset { (@clear_loop() >)*(30-$rtl) }
+@flag_assassin() {
+    local {
+        $decoy_check_size = 95   - $decoy_check_size
+        $reverse_offset = 1
+        $patience = 300
+        $suppress_antidefense = 1
+        @clear_loop()
     }
 
+    // Okay, flag was not assassinated. Plan B.
+    local {
+        $decoy_check_size = 0
+        $patience = 300 // very low patience, we already tried a lot
+        @clear_loop()
+    }
+}
+
+@lots_of_small_decoys() {
     $rtl = $ret_home + 1
     @continue_loop() {
         if ($rtl == 30) {
@@ -54,7 +66,10 @@ $check_count = 2
                 raw "{"
 
                 // We failed to clear the cell!
-                @steady_clear()
+                reset {
+                    @flag_assassin()
+                    (> @clear_loop())*(30-$rtl)
+                }
 
                 raw "}"
 
@@ -71,19 +86,9 @@ $check_count = 2
     // Either this is a large decoy being built currently or the flag on a decoyless bot.
 
     reset {
-        // large reverse offset clear on the assumption that this is the flag.
-        local {
-            $decoy_check_size = 80
-            $reverse_offset = 1
-            $suppress_antidefense = 1
-            @clear_loop()
-        }
-
-        // fairly large and steady normal offset clear
-        local {
-            $decoy_check_size = 20
-            (@clear_loop() >)*(30-$tl-1)
-        }
+        @flag_assassin()
+        $decoy_check_size = 20
+        (@clear_loop() >)*(30-$tl-1)
     }
 }
 
@@ -92,7 +97,7 @@ $check_count = 2
         // PANIK
         reset {
           $decoy_check_size = 2
-          (@clear_loop() >)*(30-$tl)
+          (> @clear_loop())*(30-$tl)
         }
     }
 
