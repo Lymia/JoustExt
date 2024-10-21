@@ -27,42 +27,65 @@ import scala.language.{implicitConversions, reflectiveCalls}
 // TODO Get rid of all this repetition of mapContents
 object ast {
   class ASTException(s: String) extends RuntimeException(s)
-  
-  trait Instruction {
-    def mapContents(f: Block => Block): Instruction
+
+  enum Instruction {
+    // Basic instructions for BFJoust
+    case Noop, IncPtr, DecPtr, IncMem, DecMem
+    case Repeat(count: Value, block: Block)
+    case While(block: Block)
+    case Forever(block: Block)
+
+    // Comments and similar
+    case Abort(reason: String)
+    case Raw(comment: String)
+    case Terminate
+
+    // BF Joust synthetic instructions
+    case Assign(vars: Map[String, Value], block: Block)
+    case IfElse(predicate: Predicate, ifClause: Block, elseClause: Block)
+    case FromTo(name: String, from: Value, to: Value, block: Block)
+    case Splice(block: Block)
+    case Invert(block: Block)
+
+    // Function-related synthetic instructions
+    case CallCC(name: String, block: Block)
+    case Reset(block: Block)
+    case Function(params: Seq[String], body: Block)
+    case LetIn(definitions: Map[String, Instruction.Function], block: Block)
+    case FunctionInvocation(name: String, params: Seq[Value])
+
+    // Internal continuation AST nodes
+    case InvokeContinuation(name: String)
+    case SavedCont(block: Block, state: (Instruction.SavedCont, Map[String, Block]))
+
+    // methods
+    def mapContents(f: Block => Block): Instruction = this match {
+      case Instruction.Repeat(n, block) => Instruction.Repeat(n, f(block))
+      case Instruction.While(block) => Instruction.While(f(block))
+      case Instruction.Forever(block) => Instruction.Forever(f(block))
+      case Instruction.Assign(vars, block) => Instruction.Assign(vars, f(block))
+      case Instruction.IfElse(predicate, ifC, elseC) => Instruction.IfElse(predicate, f(ifC), f(elseC))
+      case Instruction.FromTo(name, from, to, block) => Instruction.FromTo(name, from, to, f(block))
+      case Instruction.Splice(block) => Instruction.Splice(f(block))
+      case Instruction.Invert(block) => Instruction.Invert(f(block))
+      case Instruction.CallCC(name, block) => Instruction.CallCC(name, f(block))
+      case Instruction.Reset(block) => Instruction.Reset(f(block))
+      case Instruction.Function(params, block) => Instruction.Function(params, f(block))
+      case Instruction.LetIn(definitions, block) => Instruction.LetIn(definitions, f(block))
+      case Instruction.SavedCont(block, state) => Instruction.SavedCont(f(block), state)
+      case i => i
+    }
     def transverse(f: Instruction => Block): Instruction = mapContents(_.flatMap(f))
-  }
-  trait SimpleInstruction extends Instruction {
-    def mapContents(f: Block => Block) = this
-  }
-  trait SimpleBlock extends Instruction { this: { def copy(block: Block): Instruction } =>
-    val block: Block
-    def mapContents(f: Block => Block) = copy(block = f(block))
+
   }
 
   type Block = Seq[Instruction]
   implicit final class BlockExt(block: Block) {
-    def mapContents(f: Block => Block) = block.flatMap(_.mapContents(f))
-    def transverse(f: Instruction => Block) = block.flatMap(f)
+    def mapContents(f: Block => Block): Block = block.flatMap(_.mapContents(f))
+    def transverse(f: Instruction => Block): Block = block.flatMap(f)
   }
   implicit def autoWrapBlock(i: Instruction): Block = Seq(i)
 
-  case class StaticInstruction(s: String) extends SimpleInstruction
-  val Noop   = StaticInstruction(".")
-  val IncPtr = StaticInstruction(">")
-  val DecPtr = StaticInstruction("<")
-  val IncMem = StaticInstruction("+")
-  val DecMem = StaticInstruction("-")
-
-  val NullInstruction = StaticInstruction("")
-
-  final case class Repeat(count: Value, block: Block) extends Instruction {
-    def mapContents(f: Block => Block) = copy(block = f(block))
-  }
-  final case class While(block: Block) extends SimpleBlock
-  final case class Forever(block: Block) extends SimpleBlock
-
-  // value extensions
   enum Value {
     case Constant(i: Int)
     case Variable(s: String)
@@ -78,7 +101,6 @@ object ast {
     }
   }
   
-  // comparisons for compile time if/else
   enum Predicate {
     case Equals(a: Value, b: Value)
     case LessThan(a: Value, b: Value)
@@ -87,37 +109,4 @@ object ast {
     case And(a: Predicate, b: Predicate)
     case Or(a: Predicate, b: Predicate)
   }
-
-  // comments, etc
-  final case class Abort(reason : String) extends SimpleInstruction
-  final case class Raw  (comment: String) extends SimpleInstruction
-
-  case object Terminate extends SimpleInstruction
-
-  // synthetic instructions
-  trait SyntheticInstruction extends Instruction
-  final case class Assign(vars: Map[String, Value], block: Block) extends SyntheticInstruction {
-    def mapContents(f: Block => Block) = copy(block = f(block))
-  }
-  final case class IfElse(predicate: Predicate, ifClause: Block, elseClause: Block) extends SyntheticInstruction {
-    def mapContents(f: Block => Block) =
-      copy(ifClause = f(ifClause), elseClause = f(elseClause))
-  }
-  final case class FromTo(name: String, from: Value, to: Value, block: Block) extends SyntheticInstruction {
-    def mapContents(f: Block => Block) = copy(block = f(block))
-  }
-  final case class Splice(block: Block) extends SyntheticInstruction with SimpleBlock
-  final case class Invert(block: Block) extends SyntheticInstruction with SimpleBlock
-
-  final case class CallCC(name: String, block: Block) extends SyntheticInstruction {
-    def mapContents(f: Block => Block) = copy(block = f(block))
-  }
-  final case class Reset (block: Block) extends SyntheticInstruction with SimpleBlock
-
-  // functions
-  case class Function(params: Seq[String], body: Block)
-  final case class LetIn(definitions: Map[String, Function], block: Block) extends SyntheticInstruction {
-    def mapContents(f: Block => Block) = copy(block = f(block))
-  }
-  final case class FunctionInvocation(name: String, params: Seq[Value]) extends SimpleInstruction
 }

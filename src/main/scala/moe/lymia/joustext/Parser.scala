@@ -30,8 +30,10 @@ object Parser extends scala.util.parsing.combinator.RegexParsers {
   // Value
   object valueParsers {
     // Adapted from http://stackoverflow.com/a/11533809/1733590
-    def variable   = "$" ~> identifier ^^ Value.Variable.apply
-    def constant   = "-?[0-9]+".r ^^ (_.toInt) ^^ Value.Constant.apply
+    def variable = 
+      "$" ~> identifier ^^ Value.Variable.apply
+    def constant = 
+      "-?[0-9]+".r ^^ (_.toInt) ^^ Value.Constant.apply
 
     def defer(f: (Value, Value) => Value) = (y: Value) => (x: Value) => f(x, y)
     def plus   = "+" ~> term   ^^ defer(Value.Add.apply)
@@ -40,9 +42,10 @@ object Parser extends scala.util.parsing.combinator.RegexParsers {
     def divide = "/" ~> factor ^^ defer(Value.Div.apply)
     def mod    = "%" ~> factor ^^ defer(Value.Mod.apply)
 
-    def unNeg : Parser[Value] = (("-" ~> constant)          |
-                                 ("-" ~> variable)          |
-                                 ("-" ~> "(" ~> expr <~ ")")) ^^ (x => Value.Sub(Value.Constant(0), x))
+    def unNeg : Parser[Value] = 
+      (("-" ~> constant)          |
+       ("-" ~> variable)          |
+       ("-" ~> "(" ~> expr <~ ")")) ^^ (x => Value.Sub(Value.Constant(0), x))
 
     def join(parse: Value ~ Seq[Value=>Value]) = parse._2.foldLeft(parse._1)((a, f) => f(a))
     def expr  : Parser[Value] = term ~ (plus | minus).*           ^^ join
@@ -54,72 +57,89 @@ object Parser extends scala.util.parsing.combinator.RegexParsers {
 
   // Predicate
   object predicateParsers {
-    def comparison = ((expr <~ "==") ~ expr ^^ {case x~y => Predicate.Equals(x, y)}) |
-                     ((expr <~ "!=") ~ expr ^^ {case x~y => Predicate.Not(Predicate.Equals(x, y))}) |
-                     ((expr <~ "<" ) ~ expr ^^ {case x~y => Predicate.LessThan(x, y)}) |
-                     ((expr <~ ">" ) ~ expr ^^ {case x~y => Predicate.GreaterThan(x, y)}) |
-                     ((expr <~ "<=") ~ expr ^^ {case x~y => Predicate.Not(Predicate.GreaterThan(x, y))}) |
-                     ((expr <~ ">=") ~ expr ^^ {case x~y => Predicate.Not(Predicate.LessThan(x, y))})
-    def combination = ("!" ~> pred ^^ Predicate.Not.apply) |
-                      ((term <~ "|") ~ pred ^^ {case x~y => Predicate.Or(x, y)}) |
-                      ((term <~ "&") ~ pred ^^ {case x~y => Predicate.And(x, y)})
-    def term = comparison | ("(" ~> pred <~ ")")
-    def pred: Parser[Predicate] = comparison | combination | ("(" ~> pred <~ ")")
+    def comparison =
+      ((expr <~ "==") ~ expr ^^ {case x~y => Predicate.Equals(x, y)}) |
+      ((expr <~ "!=") ~ expr ^^ {case x~y => Predicate.Not(Predicate.Equals(x, y))}) |
+      ((expr <~ "<" ) ~ expr ^^ {case x~y => Predicate.LessThan(x, y)}) |
+      ((expr <~ ">" ) ~ expr ^^ {case x~y => Predicate.GreaterThan(x, y)}) |
+      ((expr <~ "<=") ~ expr ^^ {case x~y => Predicate.Not(Predicate.GreaterThan(x, y))}) |
+      ((expr <~ ">=") ~ expr ^^ {case x~y => Predicate.Not(Predicate.LessThan(x, y))})
+    def combination = 
+      ("!" ~> pred ^^ Predicate.Not.apply) |
+      ((term <~ "|") ~ pred ^^ {case x~y => Predicate.Or(x, y)}) |
+      ((term <~ "&") ~ pred ^^ {case x~y => Predicate.And(x, y)})
+    def term = 
+      comparison | ("(" ~> pred <~ ")")
+    def pred: Parser[Predicate] = 
+      comparison | combination | ("(" ~> pred <~ ")")
   }
   def pred = predicateParsers.pred
 
   // Basic instructions
-  def basicInstruction = ("." ^^^ Noop  ) |
-                         ("+" ^^^ IncMem) |
-                         ("-" ^^^ DecMem) |
-                         (">" ^^^ IncPtr) |
-                         ("<" ^^^ DecPtr)
+  def basicInstruction = 
+    ("." ^^^ Instruction.Noop  ) |
+    ("+" ^^^ Instruction.IncMem) |
+    ("-" ^^^ Instruction.DecMem) |
+    (">" ^^^ Instruction.IncPtr) |
+    ("<" ^^^ Instruction.DecPtr)
 
-  def basicBlock       = "[" ~> block <~ "]" ^^ While.apply
-  def repeatBlock      = ("(" ~> block <~ ")" <~ "*") ~ value ^^ {case x~y => Repeat(y, x)}
+  def basicBlock = 
+    "[" ~> block <~ "]" ^^ Instruction.While.apply
+  def repeatBlock = 
+    ("(" ~> block <~ ")" <~ "*") ~ value ^^ {case x~y => Instruction.Repeat(y, x)}
 
   // AST extensions
-  def foreverBlock     = "(" ~> block <~ ")" <~ "*" <~ "-1" ^^ Forever.apply
-  def ifBlock          =
+  def foreverBlock = 
+    "(" ~> block <~ ")" <~ "*" <~ "-1" ^^ Instruction.Forever.apply
+  def ifBlock =
     (("if" ~> "(" ~> pred <~ ")" <~ "{") ~ block <~ "}" <~ "else" <~ "{") ~ block <~ "}" ^^ {
-      case pred~a~b => IfElse(pred, a, b)
+      case pred~a~b => Instruction.IfElse(pred, a, b)
     } |
-    ("if" ~> "(" ~> pred <~ ")" <~ "{") ~ block <~ "}" ^^ {case x~y => IfElse(x,y,Seq())}
-  def fromToBlock      =
+    ("if" ~> "(" ~> pred <~ ")" <~ "{") ~ block <~ "}" ^^ {case x~y => Instruction.IfElse(x,y,Seq())}
+  def fromToBlock =
     ((("for" ~> "(" ~> "$" ~> identifier <~ "in") ~ expr <~ "to") ~ expr <~ ")" <~ "{") ~ block <~ "}" ^^ {
-      case id~from~to~block => FromTo(id, from, to, block)
+      case id~from~to~block => Instruction.FromTo(id, from, to, block)
     }
 
-  def functionCall     =
-    ("@" ~> identifier <~ "(") ~ repsep(expr, ",") <~ ")" ^^ {case x~y => FunctionInvocation(x, y)}
-  def functionDef      =
+  def functionCall =
+    ("@" ~> identifier <~ "(") ~ repsep(expr, ",") <~ ")" ^^ {case x~y => Instruction.FunctionInvocation(x, y)}
+  def functionDef: Parser[Map[String, Instruction.Function]]      =
     (("@" ~> identifier <~ "(") ~ repsep("$" ~> identifier, ",") <~ ")" <~ "{") ~ block <~ "}" ^^ {
-      case id~param~block => Map(id -> Function(param, block))
+      case id~param~block => Map(id -> Instruction.Function(param, block))
     }
-  def inlineFnDef      = functionDef ~ block ^^ {case x~y => LetIn(x, y)}
+  def inlineFnDef = 
+    functionDef ~ block ^^ {case x~y => Instruction.LetIn(x, y)}
 
-  def splice           = "local" ~> "{" ~> block <~ "}" ^^ Splice.apply
-  def abort            = ("abort" ~> "\"[^\"]*\"".r ^^ (x => Abort(x.substring(1, x.length - 1)))) |
-                         ("abort" ^^^ Abort("abort instruction encountered"))
-  def terminate        = "terminate" ^^^ Terminate
+  def splice = 
+    "local" ~> "{" ~> block <~ "}" ^^ Instruction.Splice.apply
+  def abort = 
+    ("abort" ~> "\"[^\"]*\"".r ^^ (x => Instruction.Abort(x.substring(1, x.length - 1)))) |
+    ("abort" ^^^ Instruction.Abort("abort instruction encountered"))
+  def terminate =
+    "terminate" ^^^ Instruction.Terminate
 
-  def invertBlock      = "invert" ~> "{" ~> block <~ "}" ^^ Invert.apply
+  def invertBlock =
+    "invert" ~> "{" ~> block <~ "}" ^^ Instruction.Invert.apply
 
-  def comment          =
-    "raw" ~> "\"[^\"]*\"".r ^^ (x => Raw(x.substring(1, x.length - 1))) |
-    "raw" ~> "+margins" ~> "\"[^\"]*\"".r ^^ (x => Raw(x.substring(1, x.length - 1).stripMargin))
+  def comment =
+    "raw" ~> "\"[^\"]*\"".r ^^ (x => Instruction.Raw(x.substring(1, x.length - 1))) |
+    "raw" ~> "+margins" ~> "\"[^\"]*\"".r ^^ (x => Instruction.Raw(x.substring(1, x.length - 1).stripMargin))
 
-  def setCommand       = ("$" ~> identifier <~ "=") ~ expr ^^ {case x~y => Map(x -> y)}
-  def inlineSetCommand = setCommand ~ block ^^ {case x~y => Assign(x, y)}
+  def assignCommand = 
+    ("$" ~> identifier <~ "=") ~ expr ^^ {case x~y => Map(x -> y)}
+  def inlineSetCommand =
+    assignCommand ~ block ^^ {case x~y => Instruction.Assign(x, y)}
 
-  def callCC           =
-    ("callcc" ~> "(" ~> "@" ~> identifier <~ ")" <~ "{") ~ block <~ "}" ^^ {case x~y => CallCC(x, y)}
-  def reset            = "reset" ~> "{" ~> block <~ "}" ^^ Reset.apply
+  def callCC =
+    ("callcc" ~> "(" ~> "@" ~> identifier <~ ")" <~ "{") ~ block <~ "}" ^^ {case x~y => Instruction.CallCC(x, y)}
+  def reset = 
+    "reset" ~> "{" ~> block <~ "}" ^^ Instruction.Reset.apply
 
-  def instruction   : Parser[Instruction] = basicInstruction | basicBlock | foreverBlock | repeatBlock | ifBlock |
-                                            fromToBlock | inlineFnDef | functionCall | splice | abort | comment |
-                                            inlineSetCommand | invertBlock | reset | callCC | terminate
-  def block         : Parser[Block]       = (instruction <~ ";".?).*
+  def instruction: Parser[Instruction] = 
+    basicInstruction | basicBlock | foreverBlock | repeatBlock | ifBlock | fromToBlock | inlineFnDef | functionCall | 
+    splice | abort | comment | inlineSetCommand | invertBlock | reset | callCC | terminate
+  def block: Parser[Block] = 
+    (instruction <~ ";".?).*
 
   def apply(s:String) = parseAll(block, s.replaceAll("//.*", "")) match {
     case Success(nodes, _)   => Left(nodes)

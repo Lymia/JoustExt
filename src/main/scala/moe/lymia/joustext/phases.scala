@@ -26,13 +26,13 @@ object phases {
   import ast._, astops._
 
   def doInvert(i: Block): Block = i.transverse {
-    case IncMem => DecMem
-    case DecMem => IncMem
+    case Instruction.IncMem => Instruction.DecMem
+    case Instruction.DecMem => Instruction.IncMem
     case x => x.transverse(x => doInvert(x))
   }
   def doSplice(i: Block): Block = i.transverse {
-    case Splice(x) => x.transverse(x => doSplice(x))
-    case Invert(x) => doInvert(x).transverse(x => doSplice(x))
+    case Instruction.Splice(x) => x.transverse(x => doSplice(x))
+    case Instruction.Invert(x) => doInvert(x).transverse(x => doSplice(x))
     case x => x.transverse(x => doSplice(x))
   }
 
@@ -60,18 +60,16 @@ object phases {
     case Predicate.Or (a, b) => evaluatePredicate(a, vars) || evaluatePredicate(b, vars)
     case Predicate.And(a, b) => evaluatePredicate(a, vars) && evaluatePredicate(b, vars)
   }
-  final case class InvokeContinuation(name: String) extends SimpleInstruction
 
-  // TODO: Optimize this to generate continuations only once per call/cc block.
-  def evaluateExpressions(i: Block, vars: Map[String, Int], functions: Map[String, Option[Function]])
+  def evaluateExpressions(i: Block, vars: Map[String, Int], functions: Map[String, Option[Instruction.Function]])
                          (implicit options: GenerationOptions): Block = i.transverse {
     // function evaluation
-    case LetIn(definitions, block) =>
+    case Instruction.LetIn(definitions, block) =>
       evaluateExpressions(block, vars, functions ++ definitions.map(x => x.copy(_2 = Some(x._2))))
-    case CallCC(name, block) =>
-      CallCC(name, evaluateExpressions(block, vars, functions + ((name, None))))
+    case Instruction.CallCC(name, block) =>
+      Instruction.CallCC(name, evaluateExpressions(block, vars, functions + ((name, None))))
 
-    case FunctionInvocation(name, params) =>
+    case Instruction.FunctionInvocation(name, params) =>
       if(!functions.contains(name)) throw FunctionCallException("No such function: "+name)
       functions(name) match {
         case Some(function) =>
@@ -84,23 +82,23 @@ object phases {
         case None =>
           if(params.nonEmpty)
             throw FunctionCallException("Continuation "+name+" does not take parameters")
-          InvokeContinuation(name)
+          Instruction.InvokeContinuation(name)
       }
 
     // assign
-    case Assign(values, block) =>
+    case Instruction.Assign(values, block) =>
       evaluateExpressions(block, vars ++ values.map(x => (x._1, evaluateValue(x._2, vars))), functions)
 
     // reify stuff that uses values
-    case FromTo(name, from, to, block) =>
+    case Instruction.FromTo(name, from, to, block) =>
       (evaluateValue(from, vars) to evaluateValue(to, vars)) flatMap {v =>
         evaluateExpressions(block, vars + ((name, v)), functions)
       }
-    case Repeat(times, block) =>
+    case Instruction.Repeat(times, block) =>
       val value = evaluateValue(times, vars)
       if(value < 0) throw new ASTException("Repeat runs negative times!")
-      Repeat(Value.Constant(value), evaluateExpressions(block, vars, functions))
-    case IfElse(predicate, ifClause, elseClause) =>
+      Instruction.Repeat(Value.Constant(value), evaluateExpressions(block, vars, functions))
+    case Instruction.IfElse(predicate, ifClause, elseClause) =>
       if(evaluatePredicate(predicate, vars)) evaluateExpressions(ifClause, vars, functions)
       else evaluateExpressions(elseClause, vars, functions)
 
@@ -110,56 +108,48 @@ object phases {
 
   // Turn the complex functions into normal BF Joust code!
   // This is basically the core of JoustExt.
-
-  final case class SavedCont(
-    block: Block, state: (SavedCont, Map[String, Block])) extends SyntheticInstruction {
-
-    def mapContents(f: Block => Block) = copy(block = f(block))
-    def debugPrint(): Unit = {
-      astops.printAst(linearize(block, state._1, state._2), System.out)(GenerationOptions(supportsForever = true))
-      System.out.println()
-    }
-  }
-  val abort = SavedCont(Abort("eof"), (null, Map()))
-
-  // Minimum execution time -- used to figure out when to stop expanding some constructs.
-  def linearize(blk: Block, lastCont: SavedCont = abort, conts: Map[String, Block] = Map()): Block = {
+  val abort: Instruction.SavedCont =
+    Instruction.SavedCont(Instruction.Abort("eof"), (null, Map()))
+  def linearize(blk: Block, lastCont: Instruction.SavedCont = abort, conts: Map[String, Block] = Map()): Block = {
     blk.tails.foldLeft[(Boolean, Seq[Instruction])]((false, Seq[Instruction]())) {
       case ((ended, processed), i +: left) =>
-        def continuation = SavedCont(left :+ lastCont, (lastCont, conts))
-        def buildContinuation(headInst: Block) =
-          SavedCont((headInst ++ left) :+ lastCont, (lastCont, conts))
+        def continuation: Instruction.SavedCont =
+          Instruction.SavedCont(left :+ lastCont, (lastCont, conts))
+        def buildContinuation(headInst: Block): Instruction.SavedCont =
+          Instruction.SavedCont((headInst ++ left) :+ lastCont, (lastCont, conts))
         def appendInstruction(newInst: Block) =
           (false, processed ++ newInst)
 
         if(ended) (true, processed)
         else i match {
           case `abort` => (true, processed ++ abort.block)
-          case Terminate =>
+          case Instruction.Terminate =>
             (true, processed)
-          case SavedCont(block, (saved, oldConts)) =>
+          case Instruction.SavedCont(block, (saved, oldConts)) =>
             (true, processed ++ linearize(block, saved, oldConts))
-          case Repeat(value, block) =>
+          case Instruction.Repeat(value, block) =>
             if(value.asConstant == 0) (ended, processed)
             else {
-              val blockContinuation = buildContinuation(Repeat(Value.Constant(value.asConstant - 1), block))
-              appendInstruction(Repeat(value, linearize(block, blockContinuation, conts)))
+              val contObj = buildContinuation(Instruction.Repeat(Value.Constant(value.asConstant - 1), block))
+              appendInstruction(Instruction.Repeat(value, linearize(block, contObj, conts)))
             }
-          case While(block) =>
-            appendInstruction(While(linearize(block, buildContinuation(While(block)), conts)))
-          case Forever(block) =>
-            (true, processed :+ Forever(linearize(block, buildContinuation(Forever(block)), conts)))
-          case x: Abort => (true, x)
+          case Instruction.While(block) =>
+            val contObj = buildContinuation(Instruction.While(block))
+            appendInstruction(Instruction.While(linearize(block, contObj, conts)))
+          case Instruction.Forever(block) =>
+            val contObj = buildContinuation(Instruction.Forever(block))
+            (true, processed :+ Instruction.Forever(linearize(block, contObj, conts)))
+          case x: Instruction.Abort => (true, x)
 
-          case Reset(block) =>
+          case Instruction.Reset(block) =>
             appendInstruction(linearize(block, abort, conts))
-          case CallCC(name, block) =>
+          case Instruction.CallCC(name, block) =>
             val currentCont = continuation
             val contBlock   = linearize(currentCont.block, currentCont.state._1, currentCont.state._2)
             val nextBlock   = linearize(block, currentCont, conts + ((name, contBlock)))
 
             appendInstruction(nextBlock)
-          case InvokeContinuation(name) =>
+          case Instruction.InvokeContinuation(name) =>
             if(!conts.contains(name)) throw new ASTException("Unknown continuation "+name)
             (true, processed ++ conts(name))
 
@@ -171,8 +161,8 @@ object phases {
 
   // Optimization phases
   def isTerminating(i: Instruction) = i match {
-    case _: Forever => false
-    case _: Abort   => false
+    case _: Instruction.Forever => false
+    case _: Instruction.Abort => false
 
     case _ => true
   }
@@ -183,8 +173,8 @@ object phases {
   }
 
   def unwrapNonTerminating(b: Block): Block = b.flatMap {
-    case Forever(x)    if x.nonEmpty && !isTerminating(x.last) => unwrapNonTerminating(x)
-    case Repeat (_, x) if x.nonEmpty && !isTerminating(x.last) => unwrapNonTerminating(x)
+    case Instruction.Forever(x)    if x.nonEmpty && !isTerminating(x.last) => unwrapNonTerminating(x)
+    case Instruction.Repeat (_, x) if x.nonEmpty && !isTerminating(x.last) => unwrapNonTerminating(x)
 
     case x => x.mapContents(unwrapNonTerminating)
   }
@@ -204,10 +194,11 @@ object phases {
     PhaseDef("splice"   , "Processes Splice blocks", (b, g) => doSplice(b)),
 
     // Core compilation phase
-    PhaseDef("linearize", "Transforms constructs such as if/else into BF Joust code", (b, g) => linearize(b))
+    PhaseDef("linearize", "Transforms constructs such as if/else into BF Joust code", (b, g) => linearize(b)),
 
     // Optimization
-    // PhaseDef("dce"      , "Simple dead code elimination", (b, g) => dce(b))
+    PhaseDef("dce"      , "Simple dead code elimination", (b, g) => dce(b)),
+
     // TODO: Optimize [a]a to .a (maybe?)
   )
   def runPhase(p: PhaseDef, b: Block)(implicit options: GenerationOptions) = p.fn(b, options)

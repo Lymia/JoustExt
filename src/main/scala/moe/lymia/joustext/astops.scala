@@ -36,9 +36,12 @@ object astops {
     buf.toString
   }
   def printAst(ast: Block, out: Appendable)(implicit options: GenerationOptions): Unit = ast foreach {
-    case StaticInstruction(char) =>
-      out.append(char)
-    case Repeat(value, block) =>
+    case Instruction.IncMem => out.append("+")
+    case Instruction.DecMem => out.append("-")
+    case Instruction.IncPtr => out.append(">")
+    case Instruction.DecPtr => out.append("<")
+    case Instruction.Noop => out.append(".")
+    case Instruction.Repeat(value, block) =>
       if(value.asConstant < 0) throw new ASTException("Negative repeat count!")
       else if(value.asConstant == 0) { /* do nothing */ }
       else if(value.asConstant == 1) printAst(block, out)
@@ -48,19 +51,19 @@ object astops {
         out.append(")*")
         out.append(value.asConstant.toString)
       }
-    case Forever(block) =>
+    case Instruction.Forever(block) =>
       out.append("(")
       printAst(block, out)
       out.append(")*"+options.forever)
-    case While(block) =>
+    case Instruction.While(block) =>
       out.append("[")
       printAst(block, out)
       out.append("]")
-    case Abort("eof") =>
+    case Instruction.Abort("eof") =>
       out.append("(.)*"+options.forever)
-    case Abort(reason) =>
+    case Instruction.Abort(reason) =>
       out.append(",: "+reason+" (.)*"+options.forever+" :,")
-    case Raw(text) => out.append(text)
+    case Instruction.Raw(text) => out.append(text)
 
     case x => throw new ASTException("Tried to generate unknown AST component: "+x.toString)
   }
