@@ -22,6 +22,9 @@
 
 package moe.lymia.joustext
 
+import java.security.SecureRandom
+import scala.annotation.tailrec
+
 object phases {
   import ast._, astops._
 
@@ -39,7 +42,7 @@ object phases {
   // evaluate values, and various other compile-time macro stuff.
   final case class FunctionCallException(s: String) extends ASTException(s)
   final case class VariableException(s: String) extends ASTException(s)
-  def evaluateValue(v: Value, vars: Map[String, Int]): Int = v match {
+  def evaluateValue(v: Value, vars: Map[String, Int])(implicit rng: SecureRandom): Int = v match {
     case Value.Constant(x) => x
     case Value.Variable(x) =>
       if(!vars.contains(x)) throw VariableException("No such variable $"+x)
@@ -50,8 +53,9 @@ object phases {
     case Value.Mul(x, y) => evaluateValue(x, vars) * evaluateValue(y, vars)
     case Value.Div(x, y) => evaluateValue(x, vars) / evaluateValue(y, vars)
     case Value.Mod(x, y) => evaluateValue(x, vars) % evaluateValue(y, vars)
+    case Value.RandomBetween(x, y) => rng.nextInt(evaluateValue(x, vars), evaluateValue(y, vars) + 1)
   }
-  def evaluatePredicate(p: Predicate, vars: Map[String, Int]): Boolean = p match {
+  def evaluatePredicate(p: Predicate, vars: Map[String, Int])(implicit rng: SecureRandom): Boolean = p match {
     case Predicate.Equals     (a, b) => evaluateValue(a, vars) == evaluateValue(b, vars)
     case Predicate.GreaterThan(a, b) => evaluateValue(a, vars) >  evaluateValue(b, vars)
     case Predicate.LessThan   (a, b) => evaluateValue(a, vars) <  evaluateValue(b, vars)
@@ -62,7 +66,7 @@ object phases {
   }
 
   def evaluateExpressions(i: Block, vars: Map[String, Int], functions: Map[String, Option[Instruction.Function]])
-                         (implicit options: GenerationOptions): Block = i.transverse {
+                         (implicit options: GenerationOptions, rng: SecureRandom): Block = i.transverse {
     // function evaluation
     case Instruction.LetIn(definitions, block) =>
       evaluateExpressions(block, vars, functions ++ definitions.map(x => x.copy(_2 = Some(x._2))))
@@ -178,6 +182,8 @@ object phases {
 
     case x => x.mapContents(unwrapNonTerminating)
   }
+
+  @tailrec
   def dce(b: Block): Block = {
     val n = unwrapNonTerminating(cutNonTerminating(b))
     if(n!=b) dce(n)
@@ -190,7 +196,11 @@ object phases {
   val phases = Seq(
     // Preprocessing phase
     PhaseDef("exprs"    , "Evaluates functions, from-to blocks, and the count for repeat blocks",
-             (b, g) => evaluateExpressions(b, Map(), Map())(g)),
+             (b, g) => {
+               val rnd = new SecureRandom()
+               rnd.setSeed(b.hashCode())
+               evaluateExpressions(b, Map(), Map())(g, rnd)
+             }),
     PhaseDef("splice"   , "Processes Splice blocks", (b, g) => doSplice(b)),
 
     // Core compilation phase

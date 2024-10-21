@@ -30,27 +30,29 @@ object Parser extends scala.util.parsing.combinator.RegexParsers {
   // Value
   object valueParsers {
     // Adapted from http://stackoverflow.com/a/11533809/1733590
-    def variable = 
+    def variable =
       "$" ~> identifier ^^ Value.Variable.apply
-    def constant = 
+    def constant =
       "-?[0-9]+".r ^^ (_.toInt) ^^ Value.Constant.apply
 
     def defer(f: (Value, Value) => Value) = (y: Value) => (x: Value) => f(x, y)
-    def plus   = "+" ~> term   ^^ defer(Value.Add.apply)
-    def minus  = "-" ~> term   ^^ defer(Value.Sub.apply)
-    def times  = "*" ~> factor ^^ defer(Value.Mul.apply)
-    def divide = "/" ~> factor ^^ defer(Value.Div.apply)
-    def mod    = "%" ~> factor ^^ defer(Value.Mod.apply)
+    def plus   = "+" ~> term  ^^ defer(Value.Add.apply)
+    def minus  = "-" ~> term  ^^ defer(Value.Sub.apply)
+    def times  = "*" ~> term2 ^^ defer(Value.Mul.apply)
+    def divide = "/" ~> term2 ^^ defer(Value.Div.apply)
+    def mod    = "%" ~> term2 ^^ defer(Value.Mod.apply)
+    def random = "~" ~> term3 ^^ defer(Value.RandomBetween.apply)
 
-    def unNeg : Parser[Value] = 
+    def unNeg : Parser[Value] =
       (("-" ~> constant)          |
        ("-" ~> variable)          |
        ("-" ~> "(" ~> expr <~ ")")) ^^ (x => Value.Sub(Value.Constant(0), x))
 
     def join(parse: Value ~ Seq[Value=>Value]) = parse._2.foldLeft(parse._1)((a, f) => f(a))
-    def expr  : Parser[Value] = term ~ (plus | minus).*           ^^ join
-    def term  : Parser[Value] = factor ~ (times | divide | mod).* ^^ join
-    def factor: Parser[Value] = constant | variable | unNeg | ("(" ~> expr <~ ")")
+    def expr : Parser[Value] = term ~ (plus | minus).*           ^^ join
+    def term : Parser[Value] = term2 ~ (times | divide | mod).* ^^ join
+    def term2: Parser[Value] = term3 ~ (random).* ^^ join
+    def term3: Parser[Value] = constant | variable | unNeg | ("(" ~> expr <~ ")")
   }
   def value = valueParsers.constant | valueParsers.variable | ("(" ~> valueParsers.expr <~ ")")
   def expr  = valueParsers.expr
@@ -64,32 +66,32 @@ object Parser extends scala.util.parsing.combinator.RegexParsers {
       ((expr <~ ">" ) ~ expr ^^ {case x~y => Predicate.GreaterThan(x, y)}) |
       ((expr <~ "<=") ~ expr ^^ {case x~y => Predicate.Not(Predicate.GreaterThan(x, y))}) |
       ((expr <~ ">=") ~ expr ^^ {case x~y => Predicate.Not(Predicate.LessThan(x, y))})
-    def combination = 
+    def combination =
       ("!" ~> pred ^^ Predicate.Not.apply) |
       ((term <~ "|") ~ pred ^^ {case x~y => Predicate.Or(x, y)}) |
       ((term <~ "&") ~ pred ^^ {case x~y => Predicate.And(x, y)})
-    def term = 
+    def term =
       comparison | ("(" ~> pred <~ ")")
-    def pred: Parser[Predicate] = 
+    def pred: Parser[Predicate] =
       comparison | combination | ("(" ~> pred <~ ")")
   }
   def pred = predicateParsers.pred
 
   // Basic instructions
-  def basicInstruction = 
+  def basicInstruction =
     ("." ^^^ Instruction.Noop  ) |
     ("+" ^^^ Instruction.IncMem) |
     ("-" ^^^ Instruction.DecMem) |
     (">" ^^^ Instruction.IncPtr) |
     ("<" ^^^ Instruction.DecPtr)
 
-  def basicBlock = 
+  def basicBlock =
     "[" ~> block <~ "]" ^^ Instruction.While.apply
-  def repeatBlock = 
+  def repeatBlock =
     ("(" ~> block <~ ")" <~ "*") ~ value ^^ {case x~y => Instruction.Repeat(y, x)}
 
   // AST extensions
-  def foreverBlock = 
+  def foreverBlock =
     "(" ~> block <~ ")" <~ "*" <~ "-1" ^^ Instruction.Forever.apply
   def ifBlock =
     (("if" ~> "(" ~> pred <~ ")" <~ "{") ~ block <~ "}" <~ "else" <~ "{") ~ block <~ "}" ^^ {
@@ -107,12 +109,12 @@ object Parser extends scala.util.parsing.combinator.RegexParsers {
     (("@" ~> identifier <~ "(") ~ repsep("$" ~> identifier, ",") <~ ")" <~ "{") ~ block <~ "}" ^^ {
       case id~param~block => Map(id -> Instruction.Function(param, block))
     }
-  def inlineFnDef = 
+  def inlineFnDef =
     functionDef ~ block ^^ {case x~y => Instruction.LetIn(x, y)}
 
-  def splice = 
+  def splice =
     "local" ~> "{" ~> block <~ "}" ^^ Instruction.Splice.apply
-  def abort = 
+  def abort =
     ("abort" ~> "\"[^\"]*\"".r ^^ (x => Instruction.Abort(x.substring(1, x.length - 1)))) |
     ("abort" ^^^ Instruction.Abort("abort instruction encountered"))
   def terminate =
@@ -125,20 +127,20 @@ object Parser extends scala.util.parsing.combinator.RegexParsers {
     "raw" ~> "\"[^\"]*\"".r ^^ (x => Instruction.Raw(x.substring(1, x.length - 1))) |
     "raw" ~> "+margins" ~> "\"[^\"]*\"".r ^^ (x => Instruction.Raw(x.substring(1, x.length - 1).stripMargin))
 
-  def assignCommand = 
+  def assignCommand =
     ("$" ~> identifier <~ "=") ~ expr ^^ {case x~y => Map(x -> y)}
   def inlineSetCommand =
     assignCommand ~ block ^^ {case x~y => Instruction.Assign(x, y)}
 
   def callCC =
     ("callcc" ~> "(" ~> "@" ~> identifier <~ ")" <~ "{") ~ block <~ "}" ^^ {case x~y => Instruction.CallCC(x, y)}
-  def reset = 
+  def reset =
     "reset" ~> "{" ~> block <~ "}" ^^ Instruction.Reset.apply
 
-  def instruction: Parser[Instruction] = 
-    basicInstruction | basicBlock | foreverBlock | repeatBlock | ifBlock | fromToBlock | inlineFnDef | functionCall | 
+  def instruction: Parser[Instruction] =
+    basicInstruction | basicBlock | foreverBlock | repeatBlock | ifBlock | fromToBlock | inlineFnDef | functionCall |
     splice | abort | comment | inlineSetCommand | invertBlock | reset | callCC | terminate
-  def block: Parser[Block] = 
+  def block: Parser[Block] =
     (instruction <~ ";".?).*
 
   def apply(s:String) = parseAll(block, s.replaceAll("//.*", "")) match {

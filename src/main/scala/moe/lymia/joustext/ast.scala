@@ -94,6 +94,7 @@ object ast {
     case Mul(a: Value, b: Value)
     case Div(a: Value, b: Value)
     case Mod(a: Value, b: Value)
+    case RandomBetween(a: Value, b: Value)
     
     def asConstant: Int = this match {
       case Value.Constant(i) => i
