@@ -9,6 +9,10 @@ $suppress_antidefense = 0
 $patience = 2000
 $check_count = 2
 
+@final_loop() {
+    (-.)*140 (-.+-++.)*-1
+}
+
 @clear_loop() {
     // Nyuroki based core clear loop.
     (
@@ -30,10 +34,37 @@ $check_count = 2
 }
 
 @lots_of_small_decoys() {
-    // Whatever the hell we're fighting, it makes a lot of small decoys. Overwhelm it with a fast rush.
-    reset {
-        (> @clear_loop())*(30-$tl-1)
+    @steady_clear() {
+        // We've already faced large decoys, so abandon the idea of an offset clear.
+        reset { (@clear_loop() >)*(30-$rtl) }
     }
+
+    $rtl = $ret_home + 1
+    @continue_loop() {
+        if ($rtl == 30) {
+            @final_loop()
+        } else {
+            >
+            $rtl = $rtl + 1
+
+            (-)*$decoy_check_size
+            ([
+                +
+
+                raw "{"
+
+                // We failed to clear the cell!
+                @steady_clear()
+
+                raw "}"
+
+                // Oh hey, we did clear it!
+                @continue_loop()
+            ])*($decoy_check_size * 2)
+        }
+    }
+
+    @continue_loop()
 }
 
 @found_large_cell() {
@@ -143,4 +174,4 @@ for ($tl in 10 to 29) {
 }
 
 // Must be the flag, I guess
-> (-.)*140 (-.+-++.)*-1
+> @final_loop()
