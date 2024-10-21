@@ -203,33 +203,6 @@ object phases {
       }._2
   }
 
-  // Optimization phases
-  def isTerminating(i: Instruction) = i match {
-    case _: Instruction.Forever => false
-    case _: Instruction.Abort => false
-
-    case _ => true
-  }
-  def cutNonTerminating(b: Block): Block = {
-    val (nonTerm, dead) = b.span(isTerminating)
-    if(dead.isEmpty) nonTerm.mapContents(cutNonTerminating)
-    else nonTerm.mapContents(cutNonTerminating) :+ dead.head
-  }
-
-  def unwrapNonTerminating(b: Block): Block = b.flatMap {
-    case Instruction.Forever(x)    if x.nonEmpty && !isTerminating(x.last) => unwrapNonTerminating(x)
-    case Instruction.Repeat (_, x) if x.nonEmpty && !isTerminating(x.last) => unwrapNonTerminating(x)
-
-    case x => x.mapContents(unwrapNonTerminating)
-  }
-
-  @tailrec
-  def dce(b: Block): Block = {
-    val n = unwrapNonTerminating(cutNonTerminating(b))
-    if(n!=b) dce(n)
-    else n
-  }
-
   def exprsPhase(isEarly: Boolean, b: Block, opts: GenerationOptions) = {
     val rng = new Random()
     rng.setSeed(opts.source.hashCode)
@@ -246,12 +219,7 @@ object phases {
     PhaseDef("splice", "Processes Splice blocks", (b, g) => doSplice(b)),
     PhaseDef("invert", "Processes Invert blocks", (b, g) => doInvert(b)),
     PhaseDef("continuations", "Transforms constructs such as if/else into BF Joust code", (b, g) => linearize(b)),
-    PhaseDef("late_exprs", "Evaluates expressions (late pass)", (b, g) => exprsPhase(false, b, g)),
-
-    // Optimization
-    PhaseDef("dce", "Simple dead code elimination", (b, g) => dce(b)),
-
-    // TODO: Optimize [a]a to .a (maybe?)
+    PhaseDef("late_exprs", "Evaluates expressions (late pass)", (b, g) => exprsPhase(false, b, g))
   )
   def runPhase(p: PhaseDef, b: Block)(implicit options: GenerationOptions) = p.fn(b, options)
 }
