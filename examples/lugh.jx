@@ -39,14 +39,19 @@ $check_count = 2
         $reverse_offset = 1
         $patience = 300
         $suppress_antidefense = 1
+        $check_count = 1
         @clear_loop()
     }
 
     // Okay, flag was not assassinated. Plan B.
-    local {
-        $decoy_check_size = 0
-        $patience = 300 // very low patience, we already tried a lot
-        @clear_loop()
+    callcc(@break) {
+        [
+            $decoy_check_size = 0
+            $patience = 1500 // low patience because we already tried a fair bit
+            $check_count = 1 // we already observed zero once
+            @clear_loop()
+            @break()
+        ]
     }
 }
 
