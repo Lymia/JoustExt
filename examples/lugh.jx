@@ -1,6 +1,6 @@
 // Skip to the first possible enemy flag cell
 
->+>(-)*9>+>>>>>
+>->(-)*9>+>>>>>
 
 // The actual poke loop
 $decoy_check_size = 10
@@ -105,7 +105,7 @@ $check_count = 2
     (<)*($ret_home-3)
     -[
         <<
-        -[
+        +   [
             (>)*($ret_home-3)
             @ohshit()
         ]
