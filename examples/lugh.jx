@@ -1,0 +1,121 @@
+// Skip to the first possible enemy flag cell
+
+>>+>>--->>+>>
+
+// The actual poke loop
+$decoy_check_size = 10
+$reverse_offset = 0
+$suppress_antidefense = 0
+
+@clear_loop() {
+    // Nyuroki based core clear loop.
+    (
+      if ($reverse_offset == 1) {
+        -
+      } else {
+        +
+      }
+    )*$decoy_check_size
+    callcc(@break) {
+        (([
+            - raw "{}"
+            if ($suppress_antidefense == 0) {
+              [-++--.]
+            }
+            @break()
+        ])*2000)*2
+    }
+}
+
+@lots_of_small_decoys() {
+    // Whatever the hell we're fighting, it makes a lot of small decoys. Overwhelm it with a fast rush.
+    reset {
+        (> @clear_loop())*(30-$tl-1)
+    }
+}
+
+@found_large_cell() {
+    // Either this is a large decoy being built currently or the flag on a decoyless bot.
+
+    reset {
+        // large reverse offset clear on the assumption that this is the flag.
+        local {
+          $decoy_check_size = 80
+          $reverse_offset = 1
+          $suppress_antidefense = 1
+          @clear_loop()
+        }
+
+        // fairly large and steady normal offset clear
+        local {
+          $decoy_check_size = 20
+          (@clear_loop() >)*(30-$tl-1)
+        }
+    }
+}
+
+@ohshit() {
+    // PANIK
+    reset {
+      $decoy_check_size = 2
+      (@clear_loop() >)*(30-$tl)
+    }
+}
+@found_decoy_or_tripwire() {
+    // This is a small decoy or a tripwire
+    +
+
+    // Go home, make sure we aren't fucked
+    (<)*($ret_home-2)
+    -[
+        (>)*($ret_home-2)
+        @ohshit()
+    ]
+    (+)*11
+    (>)*($ret_home-2)
+
+    // We check AGAIN if we've got a big decoy or a small decoy.
+    >
+    $ret_home = $ret_home + 1
+
+    (-)*$decoy_check_size
+    ([
+        +
+
+        raw "{"
+
+        // We failed to clear the cell!
+        @found_large_cell()
+
+        raw "}"
+
+        // Oh hey, we did clear it!
+        @lots_of_small_decoys()
+    ])*($decoy_check_size * 2)}
+
+@poke_loop($tl) {
+    $ret_home = $tl - 1
+
+    // Determine if we've found a flag or a decoy
+    (-)*$decoy_check_size
+    ([
+        +
+
+        raw "{"
+
+        // We failed to clear the cell!
+        @found_large_cell()
+
+        raw "}"
+
+        // Oh hey, we did clear it!
+        @found_decoy_or_tripwire()
+    ])*($decoy_check_size * 2)
+}
+
+for ($tl in 10 to 29) {
+    > [ @poke_loop($tl) ]
+}
+
+// Must be the flag, I guess
+> (-.)*140 (-.+-++.)*-1

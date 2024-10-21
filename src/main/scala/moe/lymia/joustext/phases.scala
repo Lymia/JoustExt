@@ -242,8 +242,8 @@ object phases {
   final case class PhaseDef(shortName: String, description: String, fn: Phase)
   val phases = Seq(
     // Core compilation phase
-    PhaseDef("splice", "Processes Splice blocks", (b, g) => doSplice(b)),
     PhaseDef("early_exprs", "Evaluates expressions (early pass)", (b, g) => exprsPhase(true, b, g)),
+    PhaseDef("splice", "Processes Splice blocks", (b, g) => doSplice(b)),
     PhaseDef("invert", "Processes Invert blocks", (b, g) => doInvert(b)),
     PhaseDef("continuations", "Transforms constructs such as if/else into BF Joust code", (b, g) => linearize(b)),
     PhaseDef("late_exprs", "Evaluates expressions (late pass)", (b, g) => exprsPhase(false, b, g)),
