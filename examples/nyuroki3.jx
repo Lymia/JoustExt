@@ -3,34 +3,39 @@ raw +margins "|Nyuroki Magical Fantasy rev 3 by Lymia Aluysia
               |
               |Source code can be found at: ( http:/" raw +margins "/github.com/Lymia/JoustExt/blob/master/examples/nyuroki3.jx )*0
               |
+              |(Shameless RNG hill fitting: 4)
               |"
 
-$offset_main_rush_min = 20
-$offset_main_rush_max = 25
+
+$is_fallback = 0
+$panicked = 0
 
 @antishudder() {
   defer {
     $kind = 1~2
     if ($kind == 1) {
-      [-+..--]
+      [--..-+]
     } else {
-      [+--++.]
+      [-++--.]
     }
   }
 }
 @rushbody_inner() {
-  (-)*($offset_min~$offset_max)
-  ([+ raw "{}"
+  (-)*$offset
+  ([
+    +
+    raw "{}"
+
     @antishudder()
-    if($check_times == 1) {
-      // If this is a panic rush, we reset to the main strategy
-      @rushbody(0, $offset_main_rush_min, $offset_main_rush_max, 2)
+
+    if($is_unusual_rush == 1) {
+      @slowrush()
     } else {
       @break()
     }
   ])*(1750~2250)
 }
-@rushbody($first, $offset_min, $offset_max, $check_times) {
+@rushbody($first, $offset, $check_times) {
   reset {
     (
       callcc(@break) {
@@ -45,17 +50,9 @@ $offset_main_rush_max = 25
         ])*$check_times
       }
 
-      if ($first == 1) {
-        (+)*$start_trail
-      } else {
-        defer {
-          if(1~2 == 1) {
-            (+)*(1~2)
-          } else {
-            (-)*(1~2)
-          }
-        }
-      }
+      defer { (.)*(0~1) }
+
+      (-)*$start_trail
 
       >
     )*21
@@ -63,52 +60,74 @@ $offset_main_rush_max = 25
 }
 
 @marksection() {
-  raw +margins "|
-                |"
-  raw "  " @label() raw": " @section()
-  raw +margins "|
-                |"
+  if ($is_fallback == 0) {
+    $is_fallback = 1
+    raw +margins "|
+                  |"
+    raw "  " @label() raw": " @section()
+    raw +margins "|
+                  |"
+  } else {
+    @section()
+  }
 }
 
 @slowrush() {
   // We set up decoys, play this safe and legit.
   $start_trail = 2
+  $is_unusual_rush = 0
+
   @label() { raw "Main attack loop" }
-  @section() { > @rushbody(1, $offset_main_rush_min, $offset_main_rush_max, 2) }
+  @section() { > @rushbody(1, 20, 2) }
   @marksection()
 }
 @fastrush() {
   // Fast rush happens on short tapes.
   $start_trail = 1
+  $is_unusual_rush = 1
+
   @label() { raw "Fast rush loop" }
-  @section() { > @rushbody(1, 5, 10, 2) }
+  @section() { > @rushbody(1, 4, 2) }
   @marksection()
 }
 @panicrush() {
-  // Panic rush happens before the opponent can possibly have zeroed their flag. 
+  // Panic rush happens before the opponent can possibly have zeroed their flag.
   $start_trail = 0
+  $is_unusual_rush = 1
+  $panicked = 1
+
   @label() { raw "Panic rush loop" }
-  @section() { > @rushbody(1, 2, 2, 1) }
+  @section() { > @rushbody(1, 2, 1) }
   @marksection()
 }
 
 reset {
+  $tripwire_decoy_height = 1
+  $home_lock_length = 17
+  $decoy_add_height = 15
+
   (>)*8
-   [       @panicrush()](+)*8
-  <[      >@panicrush()](-)*4
-  <[     >>@panicrush()](+)*4
-  <[    >>>@panicrush()](-)*4
-  <[   >>>>@panicrush()](+)*46
-  <[  >>>>>@fastrush ()](-)*41
-  <[ >>>>>>@fastrush ()](-)*50
-  <[>>>>>>>@fastrush ()](+)*60
-  <(+)*18(-)*18 // A short probabilistic lock to give us room to breathe on very short tapes.
-                // 2-cycles that set no decoys clear us right about now.
+   [        @panicrush()](+)*9
+  <[      > @panicrush()](-)*$tripwire_decoy_height
+  <[     >> @panicrush()](+)*$tripwire_decoy_height
+  <[    >>> @panicrush()](-)*$tripwire_decoy_height
+  <[   >>>> @panicrush()](+)*66
+  <[  >>>>>>@fastrush ()](-)*51
+  <[ >>>>>>>@fastrush ()](-)*40
+  <[>>>>>>>>@fastrush ()](+)*40
+
+  // A short probabilistic lock to give us room to breathe on very short tapes.
+  // 2-cycles that set no decoys clear us right about now.
+  <(+)*$home_lock_length(-)*$home_lock_length
+
+  // Advance past our long decoys
   >>>>
-  >(-)*20
-  >(+)*20
-  >(-)*20
+
+  // We are now at the start of the small decoys. They double as tripwires
+  > (+)*$tripwire_decoy_height [raw " (broken decoy) " >>> (>)*6 @slowrush()] (-)*$decoy_add_height
+  > (-)*$tripwire_decoy_height [raw " (broken decoy) " >>  (>)*6 @slowrush()] (+)*$decoy_add_height
+  > (+)*$tripwire_decoy_height [raw " (broken decoy) " >   (>)*6 @slowrush()] (-)*$decoy_add_height
   >
-  (>)*6 // violate rule of 9
+  (>)*8 // violate rule of 9
   @slowrush()
 }

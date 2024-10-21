@@ -232,7 +232,7 @@ object phases {
 
   def exprsPhase(isEarly: Boolean, b: Block, opts: GenerationOptions) = {
     val rng = new Random()
-    rng.setSeed(opts.source.hashCode  )
+    rng.setSeed(opts.source.hashCode)
     val result = evaluateExpressions(b, Map(), Map())(opts, RngPhase(isEarly, rng))
     result
   }
