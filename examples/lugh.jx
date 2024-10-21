@@ -56,7 +56,7 @@ $check_count = 2
     }
 }
 
-@found_decoy_or_tripwire() {
+@go_home_and_repair() {
     @ohshit() {
         // PANIK
         reset {
@@ -64,7 +64,30 @@ $check_count = 2
           (@clear_loop() >)*(30-$tl)
         }
     }
-    @decoys_main_behavior() {
+
+    // Go home, make sure we aren't fucked
+    (<)*($ret_home-3)
+    -[
+        <<
+        -[
+            (>)*($ret_home-3)
+            @ohshit()
+        ]
+        (-)*35
+        >>
+        (>)*($ret_home-3)
+        @main_behavior()
+    ]
+    (+)*9
+    <
+    (-)*20
+    >
+    (>)*($ret_home-3)
+    @main_behavior()
+}
+
+@found_decoy_or_tripwire() {
+    @main_behavior() {
         // We check AGAIN if we've got a big decoy or a small decoy.
         >
         $ret_home = $ret_home + 1
@@ -89,24 +112,7 @@ $check_count = 2
     +
 
     // Go home, make sure we aren't fucked
-    (<)*($ret_home-3)
-    -[
-        <<
-        -[
-            (>)*($ret_home-3)
-            @ohshit()
-        ]
-        (-)*35
-        >>
-        (>)*($ret_home-3)
-        @decoys_main_behavior()
-    ]
-    (+)*9
-    <
-    (-)*20
-    >
-    (>)*($ret_home-3)
-    @decoys_main_behavior()
+    @go_home_and_repair()
 }
 
 @poke_loop($tl) {
@@ -120,7 +126,10 @@ $check_count = 2
         raw "{"
 
         // We failed to clear the cell!
-        @found_large_cell()
+        local {
+            @main_behavior() { @found_large_cell() }
+            @go_home_and_repair()
+        }
 
         raw "}"
 
