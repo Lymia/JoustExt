@@ -35,7 +35,7 @@ $check_count = 2
 
 @flag_assassin() {
     local {
-        $decoy_check_size = 95   - $decoy_check_size
+        $decoy_check_size = 100 - $decoy_check_size
         $reverse_offset = 1
         $patience = 300
         $suppress_antidefense = 1
@@ -59,9 +59,9 @@ $check_count = 2
             >
             $rtl = $rtl + 1
 
-            (-)*$decoy_check_size
+            (+)*$decoy_check_size
             ([
-                +
+                -
 
                 raw "{"
 
@@ -128,9 +128,9 @@ $check_count = 2
         >
         $ret_home = $ret_home + 1
 
-        (-)*$decoy_check_size
+        (+)*$decoy_check_size
         ([
-            +
+            -
 
             raw "{"
 
