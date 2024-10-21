@@ -44,7 +44,8 @@ object JoustExt {
           val parsed = Parser(inputFile)
           parsed match {
             case Left(ast) =>
-              implicit val options = astops.GenerationOptions(maxCycles = 10000, supportsForever = true)
+              implicit val options =
+                astops.GenerationOptions(source = inputFile, maxCycles = 10000, supportsForever = true)
 
               var currentAst = ast
               for(phase <- phases.phases) {

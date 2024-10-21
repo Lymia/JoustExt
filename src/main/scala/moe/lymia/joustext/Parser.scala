@@ -122,6 +122,8 @@ object Parser extends scala.util.parsing.combinator.RegexParsers {
 
   def invertBlock =
     "invert" ~> "{" ~> block <~ "}" ^^ Instruction.Invert.apply
+  def deferBlock =
+    "defer" ~> "{" ~> block <~ "}" ^^ Instruction.Defer.apply
 
   def comment =
     "raw" ~> "\"[^\"]*\"".r ^^ (x => Instruction.Raw(x.substring(1, x.length - 1))) |
@@ -139,7 +141,7 @@ object Parser extends scala.util.parsing.combinator.RegexParsers {
 
   def instruction: Parser[Instruction] =
     basicInstruction | basicBlock | foreverBlock | repeatBlock | ifBlock | fromToBlock | inlineFnDef | functionCall |
-    splice | abort | comment | inlineSetCommand | invertBlock | reset | callCC | terminate
+    splice | abort | comment | inlineSetCommand | invertBlock | deferBlock | reset | callCC | terminate
   def block: Parser[Block] =
     (instruction <~ ";".?).*
 

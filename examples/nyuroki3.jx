@@ -1,0 +1,116 @@
+raw +margins "|Nyuroki Magical Fantasy rev 3 by Lymia Aluysia
+              |Released under the terms of MIT license
+              |
+              |Source code can be found at: ( http:/" raw +margins "/github.com/Lymia/JoustExt/blob/master/examples/nyuroki3.jx )*0
+              |
+              |"
+
+// $shameless rerolling = 1
+$offset_main_rush_min = 20
+$offset_main_rush_max = 25
+
+@antishudder() {
+  defer {
+    $kind = 1~2
+    if ($kind == 1) {
+      [-+..--]
+    } else {
+      [+--++.]
+    }
+  }
+}
+@rushbody_inner() {
+  (-)*($offset_min~$offset_max)
+  ([+ raw "{}"
+    @antishudder()
+    if($check_times == 1) {
+      // If this is a panic rush, we reset to the main strategy
+      @rushbody(0, $offset_main_rush_min, $offset_main_rush_max, 2)
+    } else {
+      @break()
+    }
+  ])*(1750~2250)
+}
+@trail($min_size, $max_size) {
+  if(1~2 == 1) {
+    (+)*($min_size~$max_size)
+  } else {
+    (-)*($min_size~$max_size)
+  }
+}
+@rushbody($first, $offset_min, $offset_max, $check_times) {
+  reset {
+    (
+      callcc(@break) {
+        ([
+          if(1~2 == 1) {
+            @rushbody_inner()
+          } else {
+            invert {
+              @rushbody_inner()
+            }
+          }
+        ])*$check_times
+      }
+
+      if ($first == 1) {
+        @trail($start_trail, $start_trail)
+      } else {
+        @trail(0, 2)
+      }
+
+      >
+    )*21
+  }
+}
+
+@marksection() {
+  raw +margins "|
+                |"
+  raw "  " @label() raw": " @section()
+  raw +margins "|
+                |"
+}
+
+@slowrush() {
+  // We set up decoys, play this safe and legit.
+  $start_trail = 2
+  @label() { raw "Main attack loop" }
+  @section() { > @rushbody(1, 20, 25, 2) }
+  @marksection()
+}
+@fastrush() {
+  // Fast rush happens on short tapes.
+  $start_trail = 1
+  @label() { raw "Fast rush loop" }
+  @section() { > @rushbody(1, 5, 10, 2) }
+  @marksection()
+}
+@panicrush() {
+  // Panic rush happens before the opponent can possibly have zeroed their flag. 
+  $start_trail = 0
+  @label() { raw "Panic rush loop" }
+  @section() { > @rushbody(1, 2, 2, 1) }
+  @marksection()
+}
+
+reset {
+  (>)*8
+   [       @panicrush()](+)*8
+  <[      >@panicrush()](-)*4
+  <[     >>@panicrush()](+)*4
+  <[    >>>@panicrush()](-)*4
+  <[   >>>>@panicrush()](+)*51
+  <[  >>>>>@fastrush ()](-)*51
+  <[ >>>>>>@fastrush ()](-)*51
+  <[>>>>>>>@fastrush ()](+)*51
+  <(+)*18(-)*18 // A short probabilistic lock to give us room to breathe on very short tapes.
+                // 2-cycles that set no decoys clear us right about now.
+  >>>>
+  >(-)*20
+  >(+)*20
+  >(-)*20
+  >
+  (>)*6 // violate rule of 9
+  @slowrush()
+}

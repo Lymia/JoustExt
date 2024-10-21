@@ -46,6 +46,7 @@ object ast {
     case FromTo(name: String, from: Value, to: Value, block: Block)
     case Splice(block: Block)
     case Invert(block: Block)
+    case Defer(block: Block)
 
     // Function-related synthetic instructions
     case CallCC(name: String, block: Block)
@@ -68,6 +69,7 @@ object ast {
       case Instruction.FromTo(name, from, to, block) => Instruction.FromTo(name, from, to, f(block))
       case Instruction.Splice(block) => Instruction.Splice(f(block))
       case Instruction.Invert(block) => Instruction.Invert(f(block))
+      case Instruction.Defer(block) => Instruction.Defer(f(block))
       case Instruction.CallCC(name, block) => Instruction.CallCC(name, f(block))
       case Instruction.Reset(block) => Instruction.Reset(f(block))
       case Instruction.Function(params, block) => Instruction.Function(params, f(block))

@@ -25,7 +25,7 @@ package moe.lymia.joustext
 object astops {
   import ast._
 
-  final case class GenerationOptions(maxCycles: Int = 100000, supportsForever: Boolean = true) {
+  final case class GenerationOptions(source: String = "", maxCycles: Int = 100000, supportsForever: Boolean = true) {
     val forever = if(supportsForever) -1 else maxCycles
   }
 
