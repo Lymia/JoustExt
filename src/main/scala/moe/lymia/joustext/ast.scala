@@ -34,8 +34,8 @@ object ast {
   final case class Constant(i: Int) extends Value {
     override def generate = i
   }
-  implicit def int2Val(i: Int) = Constant(i)
-  implicit def val2Int(v: Value) = v.generate
+  implicit def int2Val(i: Int): Value = Constant(i)
+  implicit def val2Int(v: Value): Int = v.generate
 
   trait Instruction {
     def mapContents(f: Block => Block): Instruction

@@ -123,6 +123,7 @@ object Parser extends scala.util.parsing.combinator.RegexParsers {
 
   def apply(s:String) = parseAll(block, s.replaceAll("//.*", "")) match {
     case Success(nodes, _)   => Left(nodes)
-    case NoSuccess(err,next) => Right("At line "+next.pos.line+", column "+next.pos.column+": "+err)
+    case Error(err,next)     => Right("At line "+next.pos.line+", column "+next.pos.column+": "+err)
+    case Failure(err,next)   => Right("At line "+next.pos.line+", column "+next.pos.column+": "+err)
   }
 }
