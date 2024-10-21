@@ -22,21 +22,12 @@
 
 package moe.lymia.joustext
 
-import scala.language.implicitConversions
+import scala.language.{implicitConversions, reflectiveCalls}
 
 // TODO Get rid of all this repetition of mapContents
 object ast {
   class ASTException(s: String) extends RuntimeException(s)
-
-  trait Value {
-    def generate: Int = throw new ASTException("Unresolved value: "+this.toString)
-  }
-  final case class Constant(i: Int) extends Value {
-    override def generate = i
-  }
-  implicit def int2Val(i: Int): Value = Constant(i)
-  implicit def val2Int(v: Value): Int = v.generate
-
+  
   trait Instruction {
     def mapContents(f: Block => Block): Instruction
     def transverse(f: Instruction => Block): Instruction = mapContents(_.flatMap(f))
@@ -70,4 +61,63 @@ object ast {
   }
   final case class While(block: Block) extends SimpleBlock
   final case class Forever(block: Block) extends SimpleBlock
+
+  // value extensions
+  enum Value {
+    case Constant(i: Int)
+    case Variable(s: String)
+    case Add(a: Value, b: Value)
+    case Sub(a: Value, b: Value)
+    case Mul(a: Value, b: Value)
+    case Div(a: Value, b: Value)
+    case Mod(a: Value, b: Value)
+    
+    def asConstant: Int = this match {
+      case Value.Constant(i) => i
+      case x => sys.error(f"Value is not a constant: $x")
+    }
+  }
+  
+  // comparisons for compile time if/else
+  enum Predicate {
+    case Equals(a: Value, b: Value)
+    case LessThan(a: Value, b: Value)
+    case GreaterThan(a: Value, b: Value)
+    case Not(v: Predicate)
+    case And(a: Predicate, b: Predicate)
+    case Or(a: Predicate, b: Predicate)
+  }
+
+  // comments, etc
+  final case class Abort(reason : String) extends SimpleInstruction
+  final case class Raw  (comment: String) extends SimpleInstruction
+
+  case object Terminate extends SimpleInstruction
+
+  // synthetic instructions
+  trait SyntheticInstruction extends Instruction
+  final case class Assign(vars: Map[String, Value], block: Block) extends SyntheticInstruction {
+    def mapContents(f: Block => Block) = copy(block = f(block))
+  }
+  final case class IfElse(predicate: Predicate, ifClause: Block, elseClause: Block) extends SyntheticInstruction {
+    def mapContents(f: Block => Block) =
+      copy(ifClause = f(ifClause), elseClause = f(elseClause))
+  }
+  final case class FromTo(name: String, from: Value, to: Value, block: Block) extends SyntheticInstruction {
+    def mapContents(f: Block => Block) = copy(block = f(block))
+  }
+  final case class Splice(block: Block) extends SyntheticInstruction with SimpleBlock
+  final case class Invert(block: Block) extends SyntheticInstruction with SimpleBlock
+
+  final case class CallCC(name: String, block: Block) extends SyntheticInstruction {
+    def mapContents(f: Block => Block) = copy(block = f(block))
+  }
+  final case class Reset (block: Block) extends SyntheticInstruction with SimpleBlock
+
+  // functions
+  case class Function(params: Seq[String], body: Block)
+  final case class LetIn(definitions: Map[String, Function], block: Block) extends SyntheticInstruction {
+    def mapContents(f: Block => Block) = copy(block = f(block))
+  }
+  final case class FunctionInvocation(name: String, params: Seq[Value]) extends SimpleInstruction
 }

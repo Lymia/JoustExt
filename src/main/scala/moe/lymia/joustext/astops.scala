@@ -23,7 +23,7 @@
 package moe.lymia.joustext
 
 object astops {
-  import ast._, astextension._
+  import ast._
 
   final case class GenerationOptions(maxCycles: Int = 100000, supportsForever: Boolean = true) {
     val forever = if(supportsForever) -1 else maxCycles
@@ -39,14 +39,14 @@ object astops {
     case StaticInstruction(char) =>
       out.append(char)
     case Repeat(value, block) =>
-      if(value < 0) throw new ASTException("Negative repeat count!")
-      else if(value.generate == 0) { /* do nothing */ }
-      else if(value.generate == 1) printAst(block, out)
+      if(value.asConstant < 0) throw new ASTException("Negative repeat count!")
+      else if(value.asConstant == 0) { /* do nothing */ }
+      else if(value.asConstant == 1) printAst(block, out)
       else {
         out.append("(")
         printAst(block, out)
         out.append(")*")
-        out.append(value.generate.toString)
+        out.append(value.asConstant.toString)
       }
     case Forever(block) =>
       out.append("(")

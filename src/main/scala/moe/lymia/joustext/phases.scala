@@ -23,7 +23,7 @@
 package moe.lymia.joustext
 
 object phases {
-  import ast._, astextension._, astops._
+  import ast._, astops._
 
   def doInvert(i: Block): Block = i.transverse {
     case IncMem => DecMem
@@ -40,25 +40,25 @@ object phases {
   final case class FunctionCallException(s: String) extends ASTException(s)
   final case class VariableException(s: String) extends ASTException(s)
   def evaluateValue(v: Value, vars: Map[String, Int]): Int = v match {
-    case Constant(x) => x
-    case Variable(x) =>
+    case Value.Constant(x) => x
+    case Value.Variable(x) =>
       if(!vars.contains(x)) throw VariableException("No such variable $"+x)
-      vars.get(x).get
+      vars(x)
 
-    case Add(x, y) => evaluateValue(x, vars) + evaluateValue(y, vars)
-    case Sub(x, y) => evaluateValue(x, vars) - evaluateValue(y, vars)
-    case Mul(x, y) => evaluateValue(x, vars) * evaluateValue(y, vars)
-    case Div(x, y) => evaluateValue(x, vars) / evaluateValue(y, vars)
-    case Mod(x, y) => evaluateValue(x, vars) % evaluateValue(y, vars)
+    case Value.Add(x, y) => evaluateValue(x, vars) + evaluateValue(y, vars)
+    case Value.Sub(x, y) => evaluateValue(x, vars) - evaluateValue(y, vars)
+    case Value.Mul(x, y) => evaluateValue(x, vars) * evaluateValue(y, vars)
+    case Value.Div(x, y) => evaluateValue(x, vars) / evaluateValue(y, vars)
+    case Value.Mod(x, y) => evaluateValue(x, vars) % evaluateValue(y, vars)
   }
   def evaluatePredicate(p: Predicate, vars: Map[String, Int]): Boolean = p match {
-    case Equals     (a, b) => evaluateValue(a, vars) == evaluateValue(b, vars)
-    case GreaterThan(a, b) => evaluateValue(a, vars) >  evaluateValue(b, vars)
-    case LessThan   (a, b) => evaluateValue(a, vars) <  evaluateValue(b, vars)
+    case Predicate.Equals     (a, b) => evaluateValue(a, vars) == evaluateValue(b, vars)
+    case Predicate.GreaterThan(a, b) => evaluateValue(a, vars) >  evaluateValue(b, vars)
+    case Predicate.LessThan   (a, b) => evaluateValue(a, vars) <  evaluateValue(b, vars)
 
-    case Not(v)    => !evaluatePredicate(v, vars)
-    case Or (a, b) => evaluatePredicate(a, vars) || evaluatePredicate(b, vars)
-    case And(a, b) => evaluatePredicate(a, vars) && evaluatePredicate(b, vars)
+    case Predicate.Not(v)    => !evaluatePredicate(v, vars)
+    case Predicate.Or (a, b) => evaluatePredicate(a, vars) || evaluatePredicate(b, vars)
+    case Predicate.And(a, b) => evaluatePredicate(a, vars) && evaluatePredicate(b, vars)
   }
   final case class InvokeContinuation(name: String) extends SimpleInstruction
 
@@ -73,7 +73,7 @@ object phases {
 
     case FunctionInvocation(name, params) =>
       if(!functions.contains(name)) throw FunctionCallException("No such function: "+name)
-      functions.get(name).get match {
+      functions(name) match {
         case Some(function) =>
           if(function.params.length != params.length)
             throw FunctionCallException("Called function "+name+" with "+params.length+" parameters. "+
@@ -82,7 +82,7 @@ object phases {
           val newValues = function.params.zip(params.map(x => evaluateValue(x, vars))).toMap
           evaluateExpressions(function.body, vars ++ newValues, functions)
         case None =>
-          if(params.length != 0)
+          if(params.nonEmpty)
             throw FunctionCallException("Continuation "+name+" does not take parameters")
           InvokeContinuation(name)
       }
@@ -97,8 +97,9 @@ object phases {
         evaluateExpressions(block, vars + ((name, v)), functions)
       }
     case Repeat(times, block) =>
-      if(evaluateValue(times, vars) < 0) throw new ASTException("Repeat runs negative times!")
-      Repeat(evaluateValue(times, vars), evaluateExpressions(block, vars, functions))
+      val value = evaluateValue(times, vars)
+      if(value < 0) throw new ASTException("Repeat runs negative times!")
+      Repeat(Value.Constant(value), evaluateExpressions(block, vars, functions))
     case IfElse(predicate, ifClause, elseClause) =>
       if(evaluatePredicate(predicate, vars)) evaluateExpressions(ifClause, vars, functions)
       else evaluateExpressions(elseClause, vars, functions)
@@ -114,7 +115,7 @@ object phases {
     block: Block, state: (SavedCont, Map[String, Block])) extends SyntheticInstruction {
 
     def mapContents(f: Block => Block) = copy(block = f(block))
-    def debugPrint() {
+    def debugPrint(): Unit = {
       astops.printAst(linearize(block, state._1, state._2), System.out)(GenerationOptions(supportsForever = true))
       System.out.println()
     }
@@ -123,9 +124,8 @@ object phases {
 
   // Minimum execution time -- used to figure out when to stop expanding some constructs.
   def linearize(blk: Block, lastCont: SavedCont = abort, conts: Map[String, Block] = Map()): Block = {
-    blk.tails.foldLeft((false, Seq[Instruction]())) {
-      case (out, Seq()) => out
-      case ((ended, processed), i :: left) =>
+    blk.tails.foldLeft[(Boolean, Seq[Instruction])]((false, Seq[Instruction]())) {
+      case ((ended, processed), i +: left) =>
         def continuation = SavedCont(left :+ lastCont, (lastCont, conts))
         def buildContinuation(headInst: Block) =
           SavedCont((headInst ++ left) :+ lastCont, (lastCont, conts))
@@ -140,9 +140,11 @@ object phases {
           case SavedCont(block, (saved, oldConts)) =>
             (true, processed ++ linearize(block, saved, oldConts))
           case Repeat(value, block) =>
-            if(value.generate == 0) (ended, processed)
-            else appendInstruction(
-              Repeat(value, linearize(block, buildContinuation(Repeat(value - 1, block)), conts)))
+            if(value.asConstant == 0) (ended, processed)
+            else {
+              val blockContinuation = buildContinuation(Repeat(Value.Constant(value.asConstant - 1), block))
+              appendInstruction(Repeat(value, linearize(block, blockContinuation, conts)))
+            }
           case While(block) =>
             appendInstruction(While(linearize(block, buildContinuation(While(block)), conts)))
           case Forever(block) =>
@@ -159,11 +161,12 @@ object phases {
             appendInstruction(nextBlock)
           case InvokeContinuation(name) =>
             if(!conts.contains(name)) throw new ASTException("Unknown continuation "+name)
-            (true, processed ++ conts.get(name).get)
+            (true, processed ++ conts(name))
 
           case x => (false, processed :+ x)
         }
-    }._2
+      case (out, _) => out
+      }._2
   }
 
   // Optimization phases

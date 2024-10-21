@@ -27,7 +27,7 @@ import java.util.Date
 
 object JoustExt {
   // TODO Add command line parameters
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     println("jxc by Lymia <lymia@lymiahugs.com>")
     println("Released under the terms of MIT license")
     println("")
