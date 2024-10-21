@@ -5,7 +5,6 @@ raw +margins "|Nyuroki Magical Fantasy rev 3 by Lymia Aluysia
               |
               |"
 
-// $shameless rerolling = 1
 $offset_main_rush_min = 20
 $offset_main_rush_max = 25
 
@@ -31,13 +30,6 @@ $offset_main_rush_max = 25
     }
   ])*(1750~2250)
 }
-@trail($min_size, $max_size) {
-  if(1~2 == 1) {
-    (+)*($min_size~$max_size)
-  } else {
-    (-)*($min_size~$max_size)
-  }
-}
 @rushbody($first, $offset_min, $offset_max, $check_times) {
   reset {
     (
@@ -54,9 +46,15 @@ $offset_main_rush_max = 25
       }
 
       if ($first == 1) {
-        @trail($start_trail, $start_trail)
+        (+)*$start_trail
       } else {
-        @trail(0, 2)
+        defer {
+          if(1~2 == 1) {
+            (+)*(1~2)
+          } else {
+            (-)*(1~2)
+          }
+        }
       }
 
       >
@@ -76,7 +74,7 @@ $offset_main_rush_max = 25
   // We set up decoys, play this safe and legit.
   $start_trail = 2
   @label() { raw "Main attack loop" }
-  @section() { > @rushbody(1, 20, 25, 2) }
+  @section() { > @rushbody(1, $offset_main_rush_min, $offset_main_rush_max, 2) }
   @marksection()
 }
 @fastrush() {
@@ -100,10 +98,10 @@ reset {
   <[      >@panicrush()](-)*4
   <[     >>@panicrush()](+)*4
   <[    >>>@panicrush()](-)*4
-  <[   >>>>@panicrush()](+)*51
-  <[  >>>>>@fastrush ()](-)*51
-  <[ >>>>>>@fastrush ()](-)*51
-  <[>>>>>>>@fastrush ()](+)*51
+  <[   >>>>@panicrush()](+)*46
+  <[  >>>>>@fastrush ()](-)*41
+  <[ >>>>>>@fastrush ()](-)*50
+  <[>>>>>>>@fastrush ()](+)*60
   <(+)*18(-)*18 // A short probabilistic lock to give us room to breathe on very short tapes.
                 // 2-cycles that set no decoys clear us right about now.
   >>>>
